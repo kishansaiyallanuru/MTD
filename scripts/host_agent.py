@@ -44,10 +44,6 @@ def resolve_hostname(hostname):
 class HostAgentHTTPHandler(BaseHTTPRequestHandler):
     """HTTP request handler for host agent server"""
 
-    def log_message(self, fmt, *args):
-        """Override to use custom logging"""
-        pass  # Suppress default logging
-
     def do_GET(self):
         """Handle GET requests"""
         self.send_response(200)
@@ -68,30 +64,49 @@ class HostAgentHTTPHandler(BaseHTTPRequestHandler):
         content_length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(content_length) if content_length > 0 else b''
 
+        # Get source information from headers or body
+        source_host = "unknown"
         try:
             # Try to parse as JSON
             if body:
                 data = json.loads(body.decode('utf-8'))
-                log(self.server.hostname, f"Received data: {data}")
+                source_host = data.get('source', data.get('src', self.client_address[0]))
+                payload_preview = str(data.get('payload', data.get('data', '')))[:50]
+
+                print("\n" + "="*70)
+                log(self.server.hostname, f"📥 PACKET RECEIVED", "SUCCESS")
+                log(self.server.hostname, f"   From: {source_host} ({self.client_address[0]})")
+                log(self.server.hostname, f"   Size: {len(body)} bytes")
+                if payload_preview:
+                    log(self.server.hostname, f"   Data: {payload_preview}...")
+                print("="*70 + "\n")
             else:
                 data = {}
-        except Exception as e:
+                log(self.server.hostname, f"Received empty payload from {self.client_address[0]}")
+        except Exception:
             data = {'raw': body.decode('utf-8', errors='ignore')}
-            log(self.server.hostname, f"Received non-JSON data: {len(body)} bytes")
+            source_host = self.client_address[0]
+            print("\n" + "="*70)
+            log(self.server.hostname, f"📥 PACKET RECEIVED (non-JSON)", "SUCCESS")
+            log(self.server.hostname, f"   From: {self.client_address[0]}")
+            log(self.server.hostname, f"   Size: {len(body)} bytes")
+            print("="*70 + "\n")
 
-        # Send success response
+        # Send success response with acknowledgment
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
 
         response = {
-            'status': 'received',
-            'host': self.server.hostname,
+            'status': 'ACK',
+            'message': 'Packet received and acknowledged',
+            'receiver': self.server.hostname,
+            'sender': source_host,
             'bytes_received': len(body),
             'timestamp': time.time()
         }
         self.wfile.write(json.dumps(response).encode())
-        log(self.server.hostname, f"✅ Packet received from {self.client_address[0]} ({len(body)} bytes)")
+        log(self.server.hostname, f"✅ ACK sent to {source_host}")
 
 class ThreadedHTTPServer(HTTPServer):
     """HTTP server with hostname attribute"""
@@ -179,7 +194,13 @@ def run_client(hostname, target, port=8080, https=False, count=None, interval=2)
             # Send request
             url = f"{protocol}://{target_ip}:{port}"
             try:
-                log(hostname, f"📤 Sending message #{message_num} to {url}...")
+                print("\n" + "="*70)
+                log(hostname, f"📤 SENDING PACKET", "INFO")
+                log(hostname, f"   To: {target} ({target_ip}:{port})")
+                log(hostname, f"   Message ID: #{message_num}")
+                log(hostname, f"   Payload: {payload['data'][:50]}...")
+                print("="*70)
+
                 response = requests.post(
                     url,
                     json=payload,
@@ -188,7 +209,18 @@ def run_client(hostname, target, port=8080, https=False, count=None, interval=2)
                 )
 
                 if response.status_code == 200:
-                    log(hostname, f"✅ SENT #{message_num} -> {target} ({target_ip}) [OK]")
+                    # Parse acknowledgment
+                    try:
+                        ack_data = response.json()
+                        print("\n" + "="*70)
+                        log(hostname, f"✅ ACKNOWLEDGMENT RECEIVED", "SUCCESS")
+                        log(hostname, f"   From: {target} ({target_ip})")
+                        log(hostname, f"   Status: {ack_data.get('status', 'ACK')}")
+                        log(hostname, f"   Message: {ack_data.get('message', 'Success')}")
+                        log(hostname, f"   Bytes delivered: {ack_data.get('bytes_received', 'N/A')}")
+                        print("="*70 + "\n")
+                    except:
+                        log(hostname, f"✅ PACKET DELIVERED #{message_num} -> {target} ({target_ip})")
                     consecutive_failures = 0
                 else:
                     log(hostname, f"⚠️  Response code {response.status_code}", "WARN")

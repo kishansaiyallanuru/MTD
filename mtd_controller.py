@@ -290,18 +290,28 @@ class SimpleRESTHandler(BaseHTTPRequestHandler):
                 # Refresh Destination IP in case MTD Shuffle occurred (e.g. if src==dst or dst rotated)
                 dst_details = self.server.app.host_map.get(dst, {})
                 dst_ip = dst_details.get('ip')
-                
+
                 # Note: This assumes host_agent.py is running on dst listening on 8080
                 delivery_success = False
                 try:
-                    trace.append({'step': 'APP', 'msg': f"Sending Encrypted Payload to {dst_ip}:8080...", 'status': 'info'})
-                    
-                    # Enhanced Curl Command for Debugging
-                    # -v: Verbose (to stderr)
-                    # --connect-timeout 5: Fast fail on connection (default is wait)
-                    # Capture stdout (http_code) and stderr (error details)
-                    curl_cmd = f"curl -v --connect-timeout 5 http://{dst_ip}:8080 2>&1"
-                    
+                    trace.append({'step': 'APP', 'msg': f"📤 Initiating Packet Transfer to {dst}...", 'status': 'info'})
+                    trace.append({'step': 'APP', 'msg': f"   Source: {src} | Destination: {dst} ({dst_ip}:8080)", 'status': 'info'})
+
+                    # Prepare payload with source information
+                    transfer_payload = {
+                        'source': src,
+                        'destination': dst,
+                        'src_ip': src_details.get('ip'),
+                        'dst_ip': dst_ip,
+                        'payload': payload,
+                        'encrypted': encrypted_hex,
+                        'timestamp': time.time()
+                    }
+
+                    # Use curl to POST JSON data to destination host agent
+                    json_data = json.dumps(transfer_payload).replace("'", "'\\''")
+                    curl_cmd = f"curl -s -X POST -H 'Content-Type: application/json' -d '{json_data}' --connect-timeout 5 http://{dst_ip}:8080 2>&1"
+
                     res = requests.post('http://127.0.0.1:8888/exec', json={
                         'host': src,
                         'cmd': curl_cmd
@@ -310,20 +320,42 @@ class SimpleRESTHandler(BaseHTTPRequestHandler):
                     if res.status_code == 200:
                         output = res.json().get('output', '').strip()
 
-                        # Check if the connection was actually successful
-                        if "HTTP/1.1 200 OK" in output or "HTTP/1.0 200 OK" in output:
-                            trace.append({'step': 'DELIVERY', 'msg': f"✅ Packet Delivered (200 OK)", 'status': 'success', 'cmd': "Verified via Curl"})
-                            delivery_success = True
-                        elif "Connection refused" in output or "Failed to connect" in output:
-                            trace.append({'step': 'DELIVERY', 'msg': f"❌ Connection Refused: Port {dst_ip}:8080 unreachable", 'status': 'error', 'details': output[:200]})
-                            delivery_success = False
-                        elif "timed out" in output.lower() or "timeout" in output.lower():
-                            trace.append({'step': 'DELIVERY', 'msg': f"❌ Connection Timeout: No response from {dst_ip}:8080", 'status': 'error'})
-                            delivery_success = False
-                        else:
-                            # Unknown response - report details
-                            trace.append({'step': 'DELIVERY', 'msg': f"⚠️ Unexpected Response", 'status': 'warning', 'details': output[:200]})
-                            delivery_success = False
+                        # Try to parse JSON acknowledgment from destination
+                        try:
+                            # Extract JSON from curl output
+                            if '{' in output and '}' in output:
+                                json_start = output.index('{')
+                                json_end = output.rindex('}') + 1
+                                ack_response = json.loads(output[json_start:json_end])
+
+                                if ack_response.get('status') == 'ACK':
+                                    trace.append({'step': 'TRANSFER', 'msg': f"📤 Packet sent from {src} to {dst}", 'status': 'success'})
+                                    trace.append({'step': 'DELIVERY', 'msg': f"📥 Packet received by {dst}", 'status': 'success'})
+                                    trace.append({'step': 'ACK', 'msg': f"✅ Acknowledgment: {ack_response.get('message', 'Success')}", 'status': 'success'})
+                                    trace.append({'step': 'ACK', 'msg': f"   Bytes transferred: {ack_response.get('bytes_received', 'N/A')}", 'status': 'info'})
+                                    delivery_success = True
+                                else:
+                                    trace.append({'step': 'DELIVERY', 'msg': f"✅ Packet Delivered - Response: {ack_response}", 'status': 'success'})
+                                    delivery_success = True
+                            else:
+                                # Fallback: Check for HTTP 200
+                                if "200" in output or "OK" in output:
+                                    trace.append({'step': 'DELIVERY', 'msg': f"✅ Packet Delivered (HTTP 200 OK)", 'status': 'success'})
+                                    delivery_success = True
+                                else:
+                                    raise ValueError("No valid response")
+                        except (json.JSONDecodeError, ValueError):
+                            # Check for error patterns
+                            if "Connection refused" in output or "Failed to connect" in output:
+                                trace.append({'step': 'DELIVERY', 'msg': f"❌ Connection Refused: Port {dst_ip}:8080 unreachable", 'status': 'error', 'details': output[:200]})
+                                delivery_success = False
+                            elif "timed out" in output.lower() or "timeout" in output.lower():
+                                trace.append({'step': 'DELIVERY', 'msg': f"❌ Connection Timeout: No response from {dst_ip}:8080", 'status': 'error'})
+                                delivery_success = False
+                            else:
+                                # Unknown response - report details
+                                trace.append({'step': 'DELIVERY', 'msg': f"⚠️ Unexpected Response", 'status': 'warning', 'details': output[:200]})
+                                delivery_success = False
 
                     else:
                         trace.append({'step': 'DELIVERY', 'msg': f"❌ Agent Execution Failed (status {res.status_code})", 'status': 'error'})
