@@ -1236,31 +1236,41 @@ class MTDController(app_manager.RyuApp):
         """
         src_zone = self.get_host_zone(src_host)
         dst_zone = self.get_host_zone(dst_host)
-        
+
+        # DEBUG LOGGING
+        LOG.debug(f"Policy Check: {src_host}({src_zone}) -> {dst_host}({dst_zone})")
+
         # Intra-zone always allowed
         if src_zone == dst_zone:
+            LOG.debug(f"  ✓ Intra-zone: {src_zone} == {dst_zone} → ALLOW")
             return True, "Intra-zone communication allowed"
 
         # Explicit Matrix
         if src_zone == 'high':
             # High can access everything (h1, h2 -> All)
+            LOG.debug(f"  ✓ High zone → ALL: ALLOW")
             return True, "High integrity zone authorized"
-            
+
         if src_zone == 'medium':
             # Medium (h3, h4) -> Medium (h3, h4) & Low (h5, h6)
             if dst_zone == 'medium' or dst_zone == 'low':
+                LOG.debug(f"  ✓ Medium → {dst_zone}: ALLOW")
                 return True, "Medium zone authorized for Med/Low"
             if dst_zone == 'high':
+                LOG.debug(f"  ✗ Medium → High: DENY")
                 return False, "Security Violation: Medium cannot access High"
-                
+
         if src_zone == 'low':
             # Low (h5, h6) -> Low (h5, h6) ONLY
             if dst_zone == 'low':
+                 LOG.debug(f"  ✓ Low → Low (intra-zone): ALLOW")
                  return True, "Low zone intra-zone allowed"
             if dst_zone == 'medium' or dst_zone == 'high':
+                LOG.debug(f"  ✗ Low → {dst_zone}: DENY")
                 return False, "Security Violation: Low cannot access Higher Zones"
-                
+
         # Fallback/Default
+        LOG.warning(f"  ✗ Policy fallthrough: {src_zone} → {dst_zone}: DENY (Implicit)")
         return False, "Implicit Deny"
 
     # END OF CONTROLLER LOGIC
