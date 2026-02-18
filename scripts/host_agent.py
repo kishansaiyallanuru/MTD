@@ -93,35 +93,37 @@ class HostAgentHTTPHandler(BaseHTTPRequestHandler):
             log(self.server.hostname, f"   Size: {len(body)} bytes")
             print("="*70 + "\n")
 
-            # 3. Compute Payload Hash (SHA256) for Integrity
-            # The controller computes hash of the SORTED JSON string of the payload it sent.
-            # To verify integrity, we should hash what we received. 
-            # Ideally, we hash the RAW bytes we received to ensure exact match.
-            # However, the controller sends `json.dumps(transfer_payload, sort_keys=True)`.
-            # We receive those bytes.
-            
-            # Let's compute hash of the body directly (which is the bytes of the json string)
-            # BUT, requests.post might affect formatting (whitespace).
-            # Controller expectations: "Calculated SHA256 of the raw payload we are sending"
-            # So we should return the hash of what we received.
-            
-            # To be robust against whitespace changes during transport (which shouldn't happen with raw TCP but typical with parsing):
-            # We re-serialize the data to sorted JSON to ensure consistent hashing, 
-            # OR we try to match exactly what the controller did.
-            # The controller code: expected_hash = hashlib.sha256(raw_payload_bytes).hexdigest()
-            # So we should hash the sorted json of the data we parsed.
-            
-            received_normalized = json.dumps(data, sort_keys=True).encode()
-            payload_hash = hashlib.sha256(received_normalized).hexdigest()
+        # Compute cryptographic verification fields
+        # Hash the received payload for integrity verification
+        payload_hash = hashlib.sha256(body).hexdigest()
 
-            # 4. Construct ACK Response
-            ack_response = {
-                "status": "ACK",
-                "session_id": session_id,
-                "destination": self.server.hostname,
-                "payload_hash": payload_hash,
-                "timestamp": time.time()
-            }
+        # Extract session ID if present
+        session_id = data.get('session_id', 'unknown')
+
+        # Send success response with acknowledgment and crypto verification
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+
+        # Build response with all required verification fields
+        response = {
+            'status': 'ACK',
+            'message': 'Packet received and acknowledged',
+            'destination': self.server.hostname,  # This host is the destination
+            'sender': source_host,
+            'bytes_received': len(body),
+            'timestamp': time.time(),
+            'payload_hash': payload_hash,  # SHA-256 hash for integrity check
+            'session_id': session_id  # Session ID echoed back
+        }
+
+        # Sign the response with HMAC for authenticity
+        response_json = json.dumps(response, sort_keys=True)
+        signature = hmac.new(SECRET, response_json.encode(), hashlib.sha256).hexdigest()
+        response['signature'] = signature
+
+        self.wfile.write(json.dumps(response).encode())
+        log(self.server.hostname, f"✅ ACK sent to {source_host} (signed, hash: {payload_hash[:8]}...)")
 
             # 5. Generate HMAC-SHA256 Signature
             # Signature covers the ACK response itself (to prove we generated this ACK)
