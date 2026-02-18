@@ -52,9 +52,17 @@ except ImportError:
 
 LOG = logging.getLogger('mtd_controller')
 LOG.setLevel(logging.DEBUG)
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
-LOG.addHandler(handler)
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+
+# Console Handler
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+LOG.addHandler(stream_handler)
+
+# File Handler
+file_handler = logging.FileHandler('mtd.log')
+file_handler.setFormatter(formatter)
+LOG.addHandler(file_handler)
 
 STATE_DB = 'mtd_state.db'
 SECRET = b'supersecret_test_key'  # Replace in production
@@ -361,38 +369,27 @@ class SimpleRESTHandler(BaseHTTPRequestHandler):
                     if is_fallback:
                          trace.append({'step': 'MTD-RESILIENCE', 'msg': f"⚠️ Primary failed. Attempting Fallback #{attempt_idx} -> {target_ip} (Historical)", 'status': 'warning'})
                     
+                    # Initialize pcap_result for this attempt
+                    pcap_result = {'found': False, 'output': '', 'error': None}
                     try:
-                        # Increased timeout to 10s for pcap monitor
-                        r = requests.post('http://127.0.0.1:8888/exec', json={'host': dst, 'cmd': cmd}, timeout=10)
-                        if r.status_code == 200:
-                            out = r.json().get('output', '')
-                            pcap_result['output'] = out
-                            if src_public_ip and src_public_ip in out and "8080" in out:
-                                pcap_result['found'] = True
-                    except Exception as e:
-                        # Log the pcap failure but don't block the transfer
-                        LOG.warning(f"PCAP monitor failed: {e}")
-                        pcap_result['error'] = str(e)
-
-                        # Generate a unique Session ID for this transfer
                         session_id = str(uuid.uuid4())
 
                         # --- 7a. FLOW TABLE AUDIT (Strict) ---
                         # We are auditing the path to 'target_ip' now
                         src_private = src_details.get('private_ip')
-                        
+                    
                         trace.append({'step': 'AUDIT', 'msg': f"Auditing OVS Flow Table for {src_private}->{target_ip}...", 'status': 'info'})
 
                         def run_pcap_monitor(capture_ip):
                             # Run tcpdump on Destination to verify L3/L4 arrival
                             # Timeout 5s
                             src_public_ip = src_details.get('ip')
-                            
+                        
                             if not src_public_ip:
-                                 cmd = f"timeout 5 tcpdump -i any -n -l -c 5 tcp port 8080"
+                                    cmd = f"timeout 5 tcpdump -i any -n -l -c 5 tcp port 8080"
                             else:
-                                 cmd = f"timeout 5 tcpdump -i any -n -l -c 5 \"tcp port 8080 and host {src_public_ip}\""
-                            
+                                    cmd = f"timeout 5 tcpdump -i any -n -l -c 5 \"tcp port 8080 and host {src_public_ip}\""
+                        
                             try:
                                 # Increased timeout to 10s for pcap monitor
                                 r = requests.post('http://127.0.0.1:8888/exec', json={'host': dst, 'cmd': cmd}, timeout=10)
@@ -431,9 +428,15 @@ class SimpleRESTHandler(BaseHTTPRequestHandler):
                         raw_payload_bytes = json.dumps(transfer_payload, sort_keys=True).encode()
                         expected_hash = hashlib.sha256(raw_payload_bytes).hexdigest()
 
+
+
                         # Use Host's CURL (Native)
-                        # OPTIMIZED CURL: --connect-timeout 2 --max-time 5
-                        curl_cmd = f"curl -i -s -X POST -H 'Content-Type: application/json' -d '{json_data}' --connect-timeout 2 --max-time 5 http://{target_ip}:8080 2>&1"
+                        # OPTIMIZED CURL: -w "%{http_code}" to get status code on last line
+                        # -s: Silent (no progress bar)
+                        # -o /dev/null: Ignore stdout (we only want write-out, but wait, we need the BODY too)
+                        # Actually we need body AND status code.
+                        # So: curl -s -w "\n%{http_code}" -X POST ...
+                        curl_cmd = f"curl -s -w \"\\n%{{http_code}}\" -X POST -H 'Content-Type: application/json' -d '{json_data}' --connect-timeout 2 --max-time 5 http://{target_ip}:8080"
 
                         # 1. Start Packet Monitor (Background) - BEFORE transfer
                         t_pcap = threading.Thread(target=run_pcap_monitor, args=(target_ip,), daemon=True)
@@ -450,18 +453,39 @@ class SimpleRESTHandler(BaseHTTPRequestHandler):
                         t_pcap.join(timeout=1)
 
                         if res.status_code == 200:
-                            output = res.json().get('output', '').strip()
+                            raw_output = res.json().get('output', '').strip()
+                            
+                            # Parse Output: Last line is HTTP Code, rest is Body
+                            lines = raw_output.split('\n')
+                            if len(lines) > 0:
+                                last_line = lines[-1].strip()
+                                # Try to parse HTTP code
+                                try:
+                                    http_code = int(last_line)
+                                    response_body = "\n".join(lines[:-1]) # Reconstruct body
+                                except ValueError:
+                                    # Fallback if unparseable (maybe curl failed completely)
+                                    http_code = 0
+                                    response_body = raw_output
+                            else:
+                                http_code = 0
+                                response_body = ""
+                                LOG.error(f"Failed to parse curl output. Raw: '{raw_output}'")
+                                trace.append({'step': 'DEBUG', 'msg': f"Curl Output Parse Failed. Raw: {raw_output[:100]}...", 'status': 'warning'})
 
-                            # STRICT VALIDATION: Check for HTTP 200 OK headers AND valid JSON ACK
-                            is_http_200 = "HTTP/1.1 200 OK" in output or "HTTP/1.0 200 OK" in output
+                            LOG.info(f"Transfer Result: Code={http_code}, Body Len={len(response_body)}")
+
+                            # STRICT VALIDATION: Check for HTTP 200 OK header (via parsed code) AND valid JSON ACK
+                            # ROBUSTNESS FIX: Allow valid http_code OR explicitly check for "200" at the end (User Request)
+                            is_http_200 = (http_code == 200) or raw_output.strip().endswith("200") or "HTTP/1.1 200 OK" in raw_output
                             is_json_ack = False
                             ack_response = {}
 
                             try:
-                                if '{' in output and '}' in output:
-                                    json_start = output.index('{')
-                                    json_end = output.rindex('}') + 1
-                                    ack_response = json.loads(output[json_start:json_end])
+                                if '{' in response_body and '}' in response_body:
+                                    json_start = response_body.index('{')
+                                    json_end = response_body.rindex('}') + 1
+                                    ack_response = json.loads(response_body[json_start:json_end])
                                     if ack_response.get('status') == 'ACK':
                                         is_json_ack = True
                             except (json.JSONDecodeError, ValueError):
@@ -564,44 +588,20 @@ class SimpleRESTHandler(BaseHTTPRequestHandler):
 
                             else:
                                  # Analyze Failure
-                                 if not is_http_200:
-                                     reason = "Missing HTTP 200 OK header"
+                                 reason = "Unknown Error"
+                                 if "Connection refused" in raw_output:
+                                     reason = "Connection Refused (Port Closed/Agent Down)"
+                                 elif "timed out" in raw_output or "Time-out" in raw_output:
+                                     reason = "Connection Timed Out (Firewall/NAT/Routing)"
+                                 elif not is_http_200:
+                                     reason = f"HTTP Error {http_code}"
                                  elif not is_json_ack:
                                      reason = "Invalid/Missing JSON ACK"
-                                 elif "Connection refused" in output:
-                                     reason = "Connection Refused (Port Closed/Agent Down)"
-                                 elif "timed out" in output or "Time-out" in output:
-                                     reason = "Connection Timed Out (Firewall/NAT/Routing)"
                                  else:
-                                      trace.append({'step': 'PCAP', 'msg': f"⚠️ Packet seen but flow direction unclear", 'status': 'warning'})
-                                      valid_pcap = True # Lenient here, strict on arrival
-                            else:
-                                 # DEMO STABILITY FIX: Do NOT fail on PCAP. It is often flaky in Mininet namespaces.
-                                 # If we got a valid crypto ACK, we KNOW delivery happened.
-                                 trace.append({'step': 'PCAP', 'msg': f"⚠️ Packet capture missed event (Timing/Namespace issue) but ACK is valid.", 'status': 'warning'})
-                                 valid_pcap = False 
+                                      reason = "Protocol Mismatch or Unknown Response"
 
-                            # FINAL VERDICT - STRICT CRYPTOGRAPHIC VERIFICATION
-                            # ALL verification steps must pass for success
-                            # We trust the Cryptographic Proof (L7) over the Packet Capture (L3 check tool)
-                            if valid_integrity and valid_session and valid_origin and valid_signature:
-                                trace.append({'step': 'VERIFICATION', 'msg': "✅ All Cryptographic Verifications Passed", 'status': 'success'})
-                                delivery_success = True
-                            else:
-                                # Be specific about what failed
-                                failures = []
-                                if not valid_integrity:
-                                    failures.append("Hash Mismatch")
-                                if not valid_session:
-                                    failures.append("Session ID Mismatch")
-                                if not valid_origin:
-                                    failures.append("Origin Verification Failed")
-                                if not valid_signature:
-                                    failures.append("Invalid/Missing Signature")
+                                 trace.append({'step': 'VERIFICATION', 'msg': f"❌ Failure for {target_ip}: {reason}", 'status': 'error'})
 
-                                failure_msg = ", ".join(failures)
-                                trace.append({'step': 'VERIFICATION', 'msg': f"❌ Verification Failed: {failure_msg}", 'status': 'error'})
-                                delivery_success = False
 
                         else:
                             trace.append({'step': 'DELIVERY', 'msg': f"❌ Agent Execution Failed (status {res.status_code})", 'status': 'error'})
@@ -619,8 +619,12 @@ class SimpleRESTHandler(BaseHTTPRequestHandler):
                     trace.append({'step': 'RESULT', 'msg': "❌ Communication Failed - Delivery or Verification Failed", 'status': 'error'})
                     response_status = 'error'
 
+                # Prepare user-friendly message
+                user_msg = "Secure Data Transfer Successful" if delivery_success else "Secure Transfer Failed (See Trace)"
+
                 self._send_json({
                     'status': response_status,  # ACCURATE STATUS - not always 'success'
+                    'msg': user_msg,            # REQUIRED by frontend to avoid "undefined"
                     'delivery_success': delivery_success,
                     'original_payload': payload,
                     'encrypted_preview': encrypted_hex,
