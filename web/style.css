@@ -1,0 +1,332 @@
+/* Enterprise MTD Dashboard Theme */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+    /* Brand Colors - Medical Cyber Security */
+    --primary: #06b6d4;
+    /* Cyan 500 */
+    --primary-dark: #0891b2;
+    --secondary: #64748b;
+    /* Slate 500 */
+    --success: #10b981;
+    /* Emerald 500 */
+    --warning: #f59e0b;
+    /* Amber 500 */
+    --danger: #ef4444;
+    /* Red 500 */
+
+    /* Backgrounds */
+    --bg-body: #0f172a;
+    /* Slate 900 */
+    --bg-card: #1e293b;
+    /* Slate 800 */
+    --bg-header: #1e293b;
+    --border-color: #334155;
+    /* Slate 700 */
+
+    /* Text */
+    --text-main: #f8fafc;
+    /* Slate 50 */
+    --text-muted: #94a3b8;
+    /* Slate 400 */
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-body);
+    color: var(--text-main);
+    margin: 0;
+    padding: 24px;
+    line-height: 1.5;
+}
+
+.mono {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.app-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+
+/* --- Cards --- */
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    /* Sharper corners for enterprise feel */
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+}
+
+.card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    /* Status indicator strip */
+    height: 100%;
+    background: var(--border-color);
+}
+
+.card:hover {
+    border-color: #475569;
+}
+
+h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin: 0 0 20px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* --- Header --- */
+header {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-header);
+    padding: 20px 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    margin-bottom: 8px;
+}
+
+.logo h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+    color: white;
+}
+
+.logo span {
+    color: var(--primary);
+}
+
+/* --- Tables --- */
+table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.95rem;
+}
+
+th {
+    text-align: left;
+    color: var(--text-muted);
+    font-weight: 500;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+
+td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #334155;
+    color: var(--text-main);
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* --- Badges & Pills --- */
+.badge {
+    padding: 4px 10px;
+    border-radius: 9999px;
+    /* Pill shape */
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.badge-high {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-med {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.badge-low {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* --- Forms & Buttons --- */
+input,
+select {
+    background: #0f172a;
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 12px;
+    border-radius: 6px;
+    width: 100%;
+    box-sizing: border-box;
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+
+input:focus,
+select:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+button {
+    padding: 12px 20px;
+    border-radius: 6px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: #0f172a;
+    /* Dark text on bright button */
+}
+
+.btn-primary:hover {
+    background: var(--primary-dark);
+    color: white;
+}
+
+.btn-danger {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+}
+
+.btn-danger:hover {
+    background: var(--danger);
+    color: white;
+}
+
+/* --- Terminal --- */
+.terminal-window {
+    background: #1e1e1e;
+    /* VS Code Like */
+    border: 1px solid #333;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.terminal-header {
+    background: #252526;
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #333;
+    font-size: 0.8rem;
+    color: #858585;
+}
+
+.terminal-body {
+    padding: 16px;
+    color: #d4d4d4;
+    font-size: 0.9rem;
+    min-height: 200px;
+    max-height: 300px;
+    overflow-y: auto;
+    line-height: 1.6;
+}
+
+.cmd-prompt {
+    color: var(--primary);
+    margin-right: 8px;
+}
+
+.cmd-error {
+    color: var(--danger);
+}
+
+.cmd-success {
+    color: var(--success);
+}
+
+/* --- Validator Flow --- */
+.flow-diagram {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 30px;
+    background: #0f172a;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.node {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    z-index: 2;
+    font-size: 1.5rem;
+}
+
+.node-label {
+    position: absolute;
+    bottom: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.connector {
+    flex: 1;
+    height: 2px;
+    background: var(--border-color);
+    margin: 0 10px;
+    position: relative;
+    transition: background 0.3s;
+}
+
+.connector.active {
+    background: var(--primary);
+    box-shadow: 0 0 10px var(--primary);
+}

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTD Enterprise Controller | Secure Relay</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <header>
+        <div class="logo">
+            <span style="font-size: 1.5rem;">🛡️</span>
+            <div>
+                <h1>Team 12 MTD PROTOTYPE <span style="font-weight:300; opacity:0.8;">FOR HOSPITAL NETWORK</span></h1>
+                <div style="font-size: 0.75rem; color:var(--text-muted); letter-spacing: 0.05em; margin-top:2px;">
+                    SECURE RELAY • MOVING TARGET DEFENSE • NETWORK v2.4
+                </div>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:32px; align-items:center;">
+            <div style="text-align:right;">
+                <div style="font-size:0.7rem; color:var(--text-muted); font-weight:600;">ACTIVE ZONES</div>
+                <div style="color:var(--success); font-weight:600;">3 (High/Med/Low)</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:0.7rem; color:var(--text-muted); font-weight:600;">SYSTEM STATUS</div>
+                <div class="badge badge-low">
+                    <span>●</span> OPERATIONAL
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-container">
+
+        <!-- ROW 1: Network Overview -->
+        <section class="card" style="grid-column: 1 / -1;">
+            <h2>Network Topology Overview</h2>
+            <div style="display:flex; gap:24px;">
+                <!-- Internal Subnet -->
+                <div
+                    style="flex:1; background:rgba(0,0,0,0.2); padding:16px; border-radius:6px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">TRUSTED ZONE</div>
+                        <div class="mono" style="font-size:1.25rem; color:var(--text-main);">10.0.0.0/24</div>
+                    </div>
+                    <div style="font-size:1.5rem; opacity:0.5;">🔒</div>
+                </div>
+
+                <!-- External Subnet -->
+                <div
+                    style="flex:1; background:rgba(6, 182, 212, 0.05); padding:16px; border-radius:6px; border:1px solid rgba(6, 182, 212, 0.2); display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-size:0.75rem; color:var(--primary); font-weight:600;">MTD PUBLIC POOL</div>
+                        <div class="mono" style="font-size:1.25rem; color:var(--primary);">172.16.0.0/24</div>
+                    </div>
+                    <div style="font-size:1.5rem; opacity:0.5;">🌐</div>
+                </div>
+
+                <!-- Stats -->
+                <div
+                    style="flex:2; display:flex; gap:16px; align-items:center; border-left:1px solid var(--border-color); padding-left:24px;">
+                    <div style="flex:1;">
+                        <div style="font-size:0.75rem; color:var(--text-muted);">HOPPING INTERVAL (AVG)</div>
+                        <div class="mono" style="font-size:1.1rem;">23.3s</div>
+                    </div>
+                    <div style="flex:1;">
+                        <div style="font-size:0.75rem; color:var(--text-muted);">ACTIVE LEASES</div>
+                        <div class="mono" style="font-size:1.1rem;">--</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- COL 1: Operations -->
+        <div style="display:flex; flex-direction:column; gap:24px;">
+            <section class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2 style="margin:0;">Secure Communication Check</h2>
+                    <button class="btn btn-danger" onclick="triggerShuffle('manual')"
+                        style="font-size:0.75rem; padding:8px 12px;">
+                        Force Rotation
+                    </button>
+                </div>
+
+                <div
+                    style="background:rgba(0,0,0,0.2); border:1px solid var(--border-color); border-radius:6px; padding:20px; margin-bottom:24px;">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
+                        <div>
+                            <label
+                                style="display:block; font-size:0.75rem; color:var(--text-muted); margin-bottom:6px;">SOURCE
+                                NODE</label>
+                            <select id="secure-src">
+                                <option value="h1">Host 1 (High Risk)</option>
+                                <option value="h2">Host 2 (High Risk)</option>
+                                <option value="h3">Host 3 (Med Risk)</option>
+                                <option value="h4">Host 4 (Med Risk)</option>
+                                <option value="h5">Host 5 (Low Risk)</option>
+                                <option value="h6">Host 6 (Low Risk)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label
+                                style="display:block; font-size:0.75rem; color:var(--text-muted); margin-bottom:6px;">TARGET
+                                NODE</label>
+                            <select id="secure-dst">
+                                <option value="h1">Host 1 (High Risk)</option>
+                                <option value="h2">Host 2 (High Risk)</option>
+                                <option value="h3">Host 3 (Med Risk)</option>
+                                <option value="h4">Host 4 (Med Risk)</option>
+                                <option value="h5">Host 5 (Low Risk)</option>
+                                <option value="h6">Host 6 (Low Risk)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:20px;">
+                        <label
+                            style="display:block; font-size:0.75rem; color:var(--text-muted); margin-bottom:6px;">ENCRYPTED
+                            PAYLOAD</label>
+                        <input type="text" id="secure-payload"
+                            value="{ 'auth_token': 'sk_live_9921', 'cmd': 'INIT_TRANSFER' }" class="mono"
+                            style="font-size:0.85rem;">
+                    </div>
+
+                    <button class="btn btn-primary" onclick="sendSecureData()" style="width:100%;">Initialize Secure
+                        Transfer</button>
+                </div>
+
+                <!-- Trace Viz -->
+                <div id="secure-result-panel" style="display:none;">
+                    <h3
+                        style="font-size:0.8rem; text-transform:uppercase; color:var(--text-muted); margin-bottom:12px;">
+                        Transmission Visualizer</h3>
+                    <div class="flow-diagram">
+                        <div class="node">
+                            <span>💻</span>
+                            <div class="node-label" id="viz-src-name">SRC</div>
+                        </div>
+                        <div class="connector" id="conn-1"></div>
+                        <div class="node" style="border-color:var(--primary); box-shadow:0 0 15px rgba(6,182,212,0.2);">
+                            <span>🛡️</span>
+                            <div class="node-label" style="color:var(--primary);">MTD GW</div>
+                        </div>
+                        <div class="connector" id="conn-2"></div>
+                        <div class="node">
+                            <span>🏁</span>
+                            <div class="node-label" id="viz-dst-name">DST</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Terminal -->
+            <section class="card" style="flex:1;">
+                <h2>Backend Controller Logs</h2>
+                <div class="terminal-window" style="flex:1;">
+                    <div class="terminal-header">
+                        <span>root@mtd-controller:~/simulation</span>
+                        <div style="flex:1;"></div>
+                        <span>bash</span>
+                    </div>
+                    <div class="terminal-body" id="live-terminal">
+                        <div style="color:#64748b;">Waiting for system events...</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- COL 2: Real-time Data -->
+        <div style="display:flex; flex-direction:column; gap:24px;">
+            <section class="card">
+                <h2>Active NAT Bindings</h2>
+                <div style="overflow-x:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Host Entity</th>
+                                <th>Risk Profile</th>
+                                <th>Private IP</th>
+                                <th>Public Identity</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="nat-rows" class="mono">
+                            <!-- JS Populated -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="card" style="flex:1;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                    <h2 style="margin:0;">IP Rotation History</h2>
+                    <button onclick="clearHistory()"
+                        style="background:transparent; border:1px solid var(--border-color); color:var(--text-muted); padding:4px 8px; font-size:0.75rem;">CLEAR
+                        LOGS</button>
+                </div>
+                <div style="flex:1; overflow-y:auto; border-top:1px solid var(--border-color); max-height:400px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Host</th>
+                                <th>Event</th>
+                                <th>New Identity</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-rows" class="mono">
+                            <!-- JS Populated -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
