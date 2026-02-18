@@ -377,8 +377,10 @@ class SimpleRESTHandler(BaseHTTPRequestHandler):
                             pcap_result['output'] = out
                             if src_public_ip and src_public_ip in out and "8080" in out:
                                 pcap_result['found'] = True
-                    except:
-                        pass
+                    except Exception as e:
+                        # Log the pcap failure but don't block the transfer
+                        LOG.warning(f"PCAP monitor failed: {e}")
+                        pcap_result['error'] = str(e)
 
                 try:
                     trace.append({'step': 'APP', 'msg': f"📤 Initiating Packet Transfer to {dst}...", 'status': 'info'})
@@ -506,13 +508,26 @@ class SimpleRESTHandler(BaseHTTPRequestHandler):
                                  trace.append({'step': 'PCAP', 'msg': f"⚠️ Packet capture missed event (Timing/Namespace issue) but ACK is valid.", 'status': 'warning'})
                                  valid_pcap = False 
 
-                            # FINAL VERDICT
-                            # STABILITY: We trust the Cryptographic Proof (L7) over the Packet Capture (L3 check tool)
-                            # If we have HTTP 200 + valid JSON + valid Hash + valid Sig + valid Session, IT WORKED.
+                            # FINAL VERDICT - STRICT CRYPTOGRAPHIC VERIFICATION
+                            # ALL verification steps must pass for success
+                            # We trust the Cryptographic Proof (L7) over the Packet Capture (L3 check tool)
                             if valid_integrity and valid_session and valid_origin and valid_signature:
+                                trace.append({'step': 'VERIFICATION', 'msg': "✅ All Cryptographic Verifications Passed", 'status': 'success'})
                                 delivery_success = True
                             else:
-                                trace.append({'step': 'RESULT', 'msg': "Verifications Failed (Check Hash/Sig/Session)", 'status': 'error'})
+                                # Be specific about what failed
+                                failures = []
+                                if not valid_integrity:
+                                    failures.append("Hash Mismatch")
+                                if not valid_session:
+                                    failures.append("Session ID Mismatch")
+                                if not valid_origin:
+                                    failures.append("Origin Verification Failed")
+                                if not valid_signature:
+                                    failures.append("Invalid/Missing Signature")
+
+                                failure_msg = ", ".join(failures)
+                                trace.append({'step': 'VERIFICATION', 'msg': f"❌ Verification Failed: {failure_msg}", 'status': 'error'})
                                 delivery_success = False
 
                         else:
@@ -542,13 +557,15 @@ class SimpleRESTHandler(BaseHTTPRequestHandler):
                      delivery_success = False
 
                 if delivery_success:
-                    # Always show Success if we reached this point (implies Policy + Crypto passed)
-                    trace.append({'step': 'RESULT', 'msg': "Communication Successful", 'status': 'success'})
+                    trace.append({'step': 'RESULT', 'msg': "✅ Communication Successful - All Verifications Passed", 'status': 'success'})
+                    response_status = 'success'
                 else:
-                    trace.append({'step': 'RESULT', 'msg': "Communication Failed", 'status': 'error'})
-                
+                    trace.append({'step': 'RESULT', 'msg': "❌ Communication Failed - Delivery or Verification Failed", 'status': 'error'})
+                    response_status = 'error'
+
                 self._send_json({
-                    'status': 'success',
+                    'status': response_status,  # ACCURATE STATUS - not always 'success'
+                    'delivery_success': delivery_success,
                     'original_payload': payload,
                     'encrypted_preview': encrypted_hex,
                     'src_priv': private_ip,

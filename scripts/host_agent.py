@@ -15,10 +15,15 @@ import time
 import sys
 import json
 import requests
+import hashlib
+import hmac
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # DNS resolution via controller
 CONTROLLER_API = "http://127.0.0.1:8000"
+
+# Secret key for HMAC (must match controller)
+SECRET = b'supersecret_test_key'  # Must match mtd_controller.py
 
 def log(host, msg, level="INFO"):
     """Log messages with timestamp and host identifier"""
@@ -92,21 +97,37 @@ class HostAgentHTTPHandler(BaseHTTPRequestHandler):
             log(self.server.hostname, f"   Size: {len(body)} bytes")
             print("="*70 + "\n")
 
-        # Send success response with acknowledgment
+        # Compute cryptographic verification fields
+        # Hash the received payload for integrity verification
+        payload_hash = hashlib.sha256(body).hexdigest()
+
+        # Extract session ID if present
+        session_id = data.get('session_id', 'unknown')
+
+        # Send success response with acknowledgment and crypto verification
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
 
+        # Build response with all required verification fields
         response = {
             'status': 'ACK',
             'message': 'Packet received and acknowledged',
-            'receiver': self.server.hostname,
+            'destination': self.server.hostname,  # This host is the destination
             'sender': source_host,
             'bytes_received': len(body),
-            'timestamp': time.time()
+            'timestamp': time.time(),
+            'payload_hash': payload_hash,  # SHA-256 hash for integrity check
+            'session_id': session_id  # Session ID echoed back
         }
+
+        # Sign the response with HMAC for authenticity
+        response_json = json.dumps(response, sort_keys=True)
+        signature = hmac.new(SECRET, response_json.encode(), hashlib.sha256).hexdigest()
+        response['signature'] = signature
+
         self.wfile.write(json.dumps(response).encode())
-        log(self.server.hostname, f"✅ ACK sent to {source_host}")
+        log(self.server.hostname, f"✅ ACK sent to {source_host} (signed, hash: {payload_hash[:8]}...)")
 
 class ThreadedHTTPServer(HTTPServer):
     """HTTP server with hostname attribute"""
